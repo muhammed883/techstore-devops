@@ -212,3 +212,4 @@ rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])
 | Deploy süresi | < 5 dakika |
 | SonarQube puanı | A |
 # techstore-devops
+# techstore-devops
