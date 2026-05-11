@@ -219,9 +219,25 @@ pipeline {
             }
         }
         always {
-            archiveArtifacts artifacts: 'coverage.xml,test-results/*.xml', allowEmptyArchive: true
-            sh 'docker image prune -f --filter "until=72h" || true'
-            cleanWs(deleteDirs: true, notFailBuild: true)
+            script {
+                try {
+                    archiveArtifacts artifacts: 'coverage.xml,test-results/*.xml', allowEmptyArchive: true
+                } catch (err) {
+                    echo "Archive skipped: ${err}"
+                }
+
+                try {
+                    sh 'docker image prune -f --filter "until=72h" || true'
+                } catch (err) {
+                    echo "Docker cleanup skipped: ${err}"
+                }
+
+                try {
+                    cleanWs(deleteDirs: true, notFailBuild: true)
+                } catch (err) {
+                    echo "Workspace cleanup skipped: ${err}"
+                }
+            }
         }
     }
 }
