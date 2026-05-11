@@ -1,0 +1,10 @@
+apiVersion: 1
+
+datasources:
+  - name: TechStore Prometheus
+    uid: techstore-prometheus
+    type: prometheus
+    access: proxy
+    url: http://techstore-prometheus:9090
+    isDefault: true
+    editable: true

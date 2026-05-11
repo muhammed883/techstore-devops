@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: TechStore
+    orgId: 1
+    folder: TechStore
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards

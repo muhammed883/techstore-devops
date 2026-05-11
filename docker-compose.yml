@@ -1,24 +1,21 @@
-version: '3.8'
-
 services:
-  # ── Uygulama ──────────────────────────────────────────
-  app:
+  techstore-app:
     build: .
     container_name: techstore-app
     ports:
       - "5000:5000"
     environment:
       - FLASK_ENV=production
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
     networks:
       - techstore-net
 
-  # ── Prometheus ─────────────────────────────────────────
   prometheus:
     image: prom/prometheus:latest
     container_name: techstore-prometheus
@@ -29,39 +26,40 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.retention.time=7d'
-    restart: unless-stopped
+    restart: always
+    depends_on:
+      techstore-app:
+        condition: service_healthy
     networks:
       - techstore-net
 
-  # ── Grafana ────────────────────────────────────────────
   grafana:
     image: grafana/grafana:latest
     container_name: techstore-grafana
     ports:
       - "3000:3000"
     environment:
+      - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=techstore123
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana-data:/var/lib/grafana
-    restart: unless-stopped
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    restart: always
     networks:
       - techstore-net
     depends_on:
       - prometheus
 
-  # ── SonarQube ──────────────────────────────────────────
   sonarqube:
-    image: sonarqube:10-community
+    image: sonarqube:lts-community
     container_name: techstore-sonarqube
     ports:
       - "9000:9000"
     environment:
       - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
-    volumes:
-      - sonar-data:/opt/sonarqube/data
-      - sonar-logs:/opt/sonarqube/logs
-    restart: unless-stopped
+    restart: always
     networks:
       - techstore-net
 
@@ -71,5 +69,3 @@ networks:
 
 volumes:
   grafana-data:
-  sonar-data:
-  sonar-logs:
