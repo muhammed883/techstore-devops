@@ -84,7 +84,7 @@ pipeline {
                             --network techstore-devops_techstore-net \
                             -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
                             -e SONAR_TOKEN="${SONAR_AUTH_TOKEN}" \
-                            --volumes-from techstore-jenkins \
+                            --volumes-from jenkins \
                             -w "$PWD" \
                             sonarsource/sonar-scanner-cli:latest \
                             -Dsonar.projectKey=techstore \

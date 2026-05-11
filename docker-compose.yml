@@ -67,7 +67,7 @@ services:
     build:
       context: .
       dockerfile: jenkins/Dockerfile
-    container_name: techstore-jenkins
+    container_name: jenkins
     user: root
     ports:
       - "8080:8080"

@@ -6,6 +6,7 @@ sonar
 slack
 blueocean
 junit
+cobertura
 ansicolor
 ws-cleanup
 credentials-binding
