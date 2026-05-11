@@ -10,6 +10,7 @@ pipeline {
     parameters {
         booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to Docker Hub using docker-hub-creds.')
+        booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: false, description: 'Wait for SonarQube Quality Gate. Requires SonarQube webhook to Jenkins.')
         string(name: 'DOCKER_IMAGE', defaultValue: 'techstore-app', description: 'Local Docker image name.')
         string(name: 'DOCKER_HUB_REPO', defaultValue: 'USER/techstore-app', description: 'Docker Hub repository, for example username/techstore-app.')
     }
@@ -97,6 +98,17 @@ pipeline {
             }
         }
 
+        stage('Quality Gate') {
+            when {
+                expression { return params.WAIT_FOR_QUALITY_GATE }
+            }
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
         stage('Docker Build') {
             steps {
                 sh '''
@@ -131,9 +143,16 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh '''
-                    docker compose up -d --build techstore-app prometheus grafana sonarqube
-                '''
+                script {
+                    try {
+                        sh '''
+                            docker compose up -d --build techstore-app prometheus grafana sonarqube
+                        '''
+                    } catch (err) {
+                        sh 'docker compose ps || true'
+                        throw err
+                    }
+                }
             }
         }
 

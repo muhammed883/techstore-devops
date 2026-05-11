@@ -57,7 +57,8 @@ Create the pipeline:
 - Name: `techstore-pipeline`
 - Definition: `Pipeline script from SCM`
 - SCM: `Git`
-- Repository URL: your GitHub repository URL
+- Repository URL: `https://github.com/muhammed883/techstore-devops`
+- Branch Specifier: `*/main`
 - Script Path: `Jenkinsfile`
 - Save > Build Now
 
@@ -68,11 +69,25 @@ Pipeline stages:
 3. Unit And Integration Tests
 4. Coverage
 5. SonarQube Analysis
-6. Docker Build
-7. Docker Push
-8. Deploy
-9. Smoke Test
-10. UI Tests
+6. Quality Gate
+7. Docker Build
+8. Docker Push
+9. Deploy
+10. Smoke Test
+11. UI Tests
+
+After the first build starts, open the pipeline dashboard:
+
+```text
+http://localhost:8080/job/techstore-pipeline/
+```
+
+Notes:
+
+- `Docker Push` runs only when the `PUSH_IMAGE` parameter is checked.
+- `UI Tests` runs only when the `RUN_UI_TESTS` parameter is checked.
+- `Quality Gate` runs only when `WAIT_FOR_QUALITY_GATE` is checked and a SonarQube webhook is configured.
+- Jenkins runs inside Docker, so the pipeline smoke test uses `http://techstore-app:5000/health`. From your browser or host terminal, use `http://localhost:5000/health`.
 
 ## SonarQube Quality Gate
 
@@ -105,6 +120,12 @@ Recommended webhook:
 
 ```text
 http://localhost:8080/github-webhook/
+```
+
+For SonarQube Quality Gate callbacks, add this webhook in SonarQube if you enable `WAIT_FOR_QUALITY_GATE`:
+
+```text
+http://jenkins:8080/sonarqube-webhook/
 ```
 
 Grafana: `http://localhost:3000` with `admin / techstore123`.
