@@ -174,38 +174,35 @@ pipeline {
     }
 
     // ── POST ACTIONS ────────────────────────────────────────────
+  // ── POST ACTIONS ────────────────────────────────────────────
     post {
         success {
             echo "🎉 Pipeline başarıyla tamamlandı!"
-            slackSend(
-                channel: env.SLACK_CHANNEL,
-                color: 'good',
-                message: """
-✅ *TechStore Deploy Başarılı*
-• Branch: `${env.BRANCH_NAME}`
-• Build: `#${env.BUILD_NUMBER}`
-• Commit: `${env.GIT_COMMIT?.take(7)}`
-• URL: ${env.BUILD_URL}
-                """
-            )
+            // Eğer Slack ayarların tam değilse burası hata vermeye devam eder.
+            // Hata almamak için şimdilik script bloğu içine alıp try-catch ekledim.
+            script {
+                try {
+                    slackSend(
+                        channel: env.SLACK_CHANNEL,
+                        color: 'good',
+                        message: "✅ *TechStore Deploy Başarılı*\n• Build: #${env.BUILD_NUMBER}"
+                    )
+                } catch (Exception e) {
+                    echo "Slack bildirimi gönderilemedi (Ayarları kontrol edin): ${e.message}"
+                }
+            }
         }
         failure {
             echo "❌ Pipeline başarısız!"
-            slackSend(
-                channel: env.SLACK_CHANNEL,
-                color: 'danger',
-                message: """
-❌ *TechStore Deploy Başarısız*
-• Branch: `${env.BRANCH_NAME}`
-• Build: `#${env.BUILD_NUMBER}`
-• Aşama: ${env.STAGE_NAME}
-• Detay: ${env.BUILD_URL}console
-                """
-            )
         }
         always {
-            sh "docker image prune -f --filter 'until=72h' || true"
-            cleanWs()
+            // KRİTİK DÜZELTME: sh ve cleanWs komutlarını node {} içine alıyoruz.
+            // Bu sayede Jenkins her zaman bir çalışma alanı tahsis eder.
+            node {
+                sh "docker image prune -f --filter 'until=72h' || true"
+                cleanWs()
+            }
         }
     }
+}
 }
