@@ -106,11 +106,28 @@ Create the project manually:
 Create and copy a token from SonarQube. Then configure Jenkins:
 
 - Manage Jenkins > System > SonarQube servers
+- Check/Add `Environment variables`
 - Name: `SonarQube`
 - Server URL: `http://sonarqube:9000`
 - Server authentication token: select/create a Secret Text credential with the copied token
 
 Use `http://sonarqube:9000` inside Jenkins because Jenkins runs in the same Docker network as SonarQube. Browser access remains `http://localhost:9000`.
+
+If the build fails with this message:
+
+```text
+SonarQube installation defined in this job (SonarQube) does not match any configured installation
+```
+
+then the Jenkins global SonarQube server has not been configured yet. Go to:
+
+```text
+http://localhost:8080/manage/configure
+```
+
+and add the SonarQube server exactly as `Name: SonarQube`. The name is case-sensitive.
+
+For a temporary pipeline-only smoke run, build with parameter `RUN_SONAR=false`. This skips SonarQube analysis while keeping tests, coverage, Docker build, deploy, and smoke test active.
 
 Required Jenkins credentials:
 

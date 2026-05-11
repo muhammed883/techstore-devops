@@ -9,6 +9,7 @@ pipeline {
 
     parameters {
         booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
+        booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Run SonarQube analysis. Requires Jenkins SonarQube installation named SonarQube.')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to Docker Hub using docker-hub-creds.')
         booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: false, description: 'Wait for SonarQube Quality Gate. Requires SonarQube webhook to Jenkins.')
         string(name: 'DOCKER_IMAGE', defaultValue: 'techstore-app', description: 'Local Docker image name.')
@@ -80,29 +81,44 @@ pipeline {
         }
 
         stage('SonarQube Analysis') {
+            when {
+                expression { return params.RUN_SONAR }
+            }
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        docker run --rm \
-                            --network techstore-devops_techstore-net \
-                            -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
-                            -e SONAR_TOKEN="${SONAR_AUTH_TOKEN}" \
-                            --volumes-from jenkins \
-                            -w "$PWD" \
-                            sonarsource/sonar-scanner-cli:latest \
-                            -Dsonar.projectKey=techstore \
-                            -Dsonar.projectName="TechStore E-Commerce" \
-                            -Dsonar.sources=. \
-                            -Dsonar.exclusions=.venv/**,venv/**,htmlcov/**,tests/**,**/__pycache__/**,*.pyc \
-                            -Dsonar.python.coverage.reportPaths=coverage.xml
-                    '''
+                script {
+                    try {
+                        withSonarQubeEnv('SonarQube') {
+                            sh '''
+                                docker run --rm \
+                                    --network techstore-devops_techstore-net \
+                                    -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
+                                    -e SONAR_TOKEN="${SONAR_AUTH_TOKEN}" \
+                                    --volumes-from jenkins \
+                                    -w "$PWD" \
+                                    sonarsource/sonar-scanner-cli:latest \
+                                    -Dsonar.projectKey=techstore \
+                                    -Dsonar.projectName="TechStore E-Commerce" \
+                                    -Dsonar.sources=. \
+                                    -Dsonar.exclusions=.venv/**,venv/**,htmlcov/**,tests/**,**/__pycache__/**,*.pyc \
+                                    -Dsonar.python.coverage.reportPaths=coverage.xml
+                            '''
+                        }
+                    } catch (err) {
+                        error """SonarQube analysis failed.
+Check Jenkins > Manage Jenkins > System > SonarQube servers:
+- Name: SonarQube
+- Server URL: http://sonarqube:9000
+- Server authentication token: your SonarQube token
+
+Original error: ${err}"""
+                    }
                 }
             }
         }
 
         stage('Quality Gate') {
             when {
-                expression { return params.WAIT_FOR_QUALITY_GATE }
+                expression { return params.RUN_SONAR && params.WAIT_FOR_QUALITY_GATE }
             }
             steps {
                 timeout(time: 5, unit: 'MINUTES') {
