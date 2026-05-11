@@ -51,6 +51,7 @@ pipeline {
                 sh '''
                     mkdir -p test-results
                     . ${VENV_DIR}/bin/activate
+                    export PYTHONPATH="$PWD"
                     pytest tests/test_app.py tests/test_api.py tests/test_cart.py tests/test_search.py tests/test_smoke.py \
                         -v \
                         --tb=short \
@@ -68,6 +69,7 @@ pipeline {
             steps {
                 sh '''
                     . ${VENV_DIR}/bin/activate
+                    export PYTHONPATH="$PWD"
                     pytest tests/test_app.py tests/test_api.py tests/test_cart.py tests/test_search.py tests/test_smoke.py \
                         --cov=app \
                         --cov-report=xml:coverage.xml \
@@ -183,6 +185,7 @@ pipeline {
             steps {
                 sh '''
                     . ${VENV_DIR}/bin/activate
+                    export PYTHONPATH="$PWD"
                     pytest tests/test_ui.py -v --tb=short
                 '''
             }

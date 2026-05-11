@@ -1,9 +1,15 @@
 import socket
+import sys
 import threading
 import time
+from pathlib import Path
 
 import pytest
 from werkzeug.serving import make_server
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 from app import app
 
