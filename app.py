@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for
 from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 import time
 import uuid
@@ -206,7 +206,7 @@ def cart_page():
 
 @app.route('/api/cart/add', methods=['POST'])
 def add_to_cart():
-    data = request.get_json()
+    data = request.get_json(silent=True) or {}
     product_id = data.get('product_id')
     quantity = data.get('quantity', 1)
 
@@ -244,6 +244,31 @@ def add_to_cart():
         'cart_total': summary['total']
     })
 
+@app.route('/cart/add/<int:product_id>')
+def add_to_cart_page(product_id):
+    product = get_product_by_id(product_id)
+
+    if product:
+        cart = get_cart()
+        pid_str = str(product_id)
+
+        if pid_str in cart:
+            cart[pid_str]['quantity'] += 1
+        else:
+            cart[pid_str] = {
+                'product_id': product_id,
+                'name': product['name'],
+                'price': product['price'],
+                'category': product['category'],
+                'emoji': product['image_placeholder'],
+                'quantity': 1
+            }
+
+        session['cart'] = cart
+        CART_ADD_COUNT.labels(product_id=str(product_id)).inc()
+
+    return redirect(url_for('home'))
+
 @app.route('/api/cart/remove', methods=['POST'])
 def remove_from_cart():
     data = request.get_json()
@@ -271,7 +296,7 @@ def update_cart():
     return jsonify({'success': True, 'cart_count': summary['count'], 'cart_total': summary['total']})
 
 @app.route('/api/search')
-def search():
+def api_search():
     query = request.args.get('q', '').lower()
     category = request.args.get('category', '')
     results = PRODUCTS
@@ -280,6 +305,26 @@ def search():
     if category:
         results = [p for p in results if p['category'] == category]
     return jsonify(results)
+
+@app.route('/search')
+def search():
+    query = request.args.get('q', '').strip()
+    query_lower = query.lower()
+    results = PRODUCTS
+
+    if query_lower:
+        results = [
+            p for p in PRODUCTS
+            if query_lower in p['name'].lower() or query_lower in p['category'].lower()
+        ]
+
+    summary = cart_summary(get_cart())
+    return render_template(
+        'search.html',
+        products=results,
+        query=query,
+        cart_count=summary['count']
+    )
 
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
