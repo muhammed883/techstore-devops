@@ -205,7 +205,6 @@ pipeline {
         }
         always {
     node {
-        sh "docker image prune -f --filter 'until=72h' || true"
         cleanWs()
     }
 }
