@@ -89,12 +89,14 @@ pipeline {
                     try {
                         withSonarQubeEnv('SonarQube') {
                             sh '''
+                                mkdir -p .scannerwork
                                 docker run --rm \
                                     --network techstore-devops_techstore-net \
                                     -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
                                     -e SONAR_TOKEN="${SONAR_AUTH_TOKEN}" \
                                     --volumes-from jenkins \
                                     -w "$PWD" \
+                                    -u "$(id -u):$(id -g)" \
                                     sonarsource/sonar-scanner-cli:latest \
                                     -Dsonar.projectKey=techstore \
                                     -Dsonar.projectName="TechStore E-Commerce" \
