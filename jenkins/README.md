@@ -21,9 +21,31 @@ Get the initial admin password:
 docker exec jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
+## SonarQube Quality Gate
+
+Open SonarQube:
+
+```text
+http://localhost:9000
+```
+
+Create the project manually:
+
+- Project key: `techstore`
+- Display name: `TechStore E-Commerce`
+- Analysis method: `Locally`
+
+Create and copy a token from SonarQube. Then configure Jenkins:
+
+- Manage Jenkins > System > SonarQube servers
+- Name: `SonarQube`
+- Server URL: `http://sonarqube:9000`
+- Server authentication token: select/create a Secret Text credential with the copied token
+
+Use `http://sonarqube:9000` inside Jenkins because Jenkins runs in the same Docker network as SonarQube. Browser access remains `http://localhost:9000`.
+
 Required Jenkins credentials:
 
-- `sonar-token`: Secret text from SonarQube.
 - `docker-hub-creds`: Username/password for Docker Hub, only needed when `PUSH_IMAGE=true`.
 
 Recommended webhook:

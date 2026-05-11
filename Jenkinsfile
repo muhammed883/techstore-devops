@@ -16,8 +16,6 @@ pipeline {
 
     environment {
         VENV_DIR = '.venv'
-        SONAR_HOST_URL = 'http://sonarqube:9000'
-        SONAR_TOKEN = credentials('sonar-token')
         SLACK_CHANNEL = '#devops-techstore'
         COMPOSE_PROJECT_NAME = 'techstore-devops'
     }
@@ -80,20 +78,22 @@ pipeline {
 
         stage('SonarQube Analysis') {
             steps {
-                sh '''
-                    docker run --rm \
-                        --network techstore-devops_techstore-net \
-                        -e SONAR_HOST_URL=${SONAR_HOST_URL} \
-                        -e SONAR_TOKEN=${SONAR_TOKEN} \
-                        --volumes-from techstore-jenkins \
-                        -w "$PWD" \
-                        sonarsource/sonar-scanner-cli:latest \
-                        -Dsonar.projectKey=techstore \
-                        -Dsonar.projectName="TechStore E-Commerce" \
-                        -Dsonar.sources=. \
-                        -Dsonar.exclusions=.venv/**,venv/**,htmlcov/**,tests/**,**/__pycache__/**,*.pyc \
-                        -Dsonar.python.coverage.reportPaths=coverage.xml
-                '''
+                withSonarQubeEnv('SonarQube') {
+                    sh '''
+                        docker run --rm \
+                            --network techstore-devops_techstore-net \
+                            -e SONAR_HOST_URL="${SONAR_HOST_URL}" \
+                            -e SONAR_TOKEN="${SONAR_AUTH_TOKEN}" \
+                            --volumes-from techstore-jenkins \
+                            -w "$PWD" \
+                            sonarsource/sonar-scanner-cli:latest \
+                            -Dsonar.projectKey=techstore \
+                            -Dsonar.projectName="TechStore E-Commerce" \
+                            -Dsonar.sources=. \
+                            -Dsonar.exclusions=.venv/**,venv/**,htmlcov/**,tests/**,**/__pycache__/**,*.pyc \
+                            -Dsonar.python.coverage.reportPaths=coverage.xml
+                    '''
+                }
             }
         }
 
