@@ -5,7 +5,7 @@ pipeline {
         DOCKER_IMAGE    = 'techstore-app'
         DOCKER_HUB_USER = 'kullanici-adi'          // Docker Hub kullanıcı adınız
         SONAR_HOST      = 'http://localhost:9000'
-        SONAR_TOKEN     = credentials('sonar-token') // Jenkins Credentials'a 'sonar-token' ID'si ile ekleyin
+        SONAR_TOKEN     = credentials('sonar-token') // Jenkins Credentials'a ekleyin
         SLACK_CHANNEL   = '#devops-techstore'
     }
 
@@ -15,7 +15,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "✅ Kod GitHub'dan alındı."
+                echo "✅ Kod GitHub'dan alındı: ${env.GIT_COMMIT?.take(7)}"
             }
         }
 
@@ -26,7 +26,7 @@ pipeline {
                     python3 -m venv venv
                     . venv/bin/activate
                     pip install --upgrade pip
-                    pip install -r requirements.txt || echo "Requirements dosyası bulunamadı, atlanıyor."
+                    pip install -r requirements.txt
                 '''
                 echo "✅ Python sanal ortamı hazır"
             }
@@ -43,12 +43,13 @@ pipeline {
                         --junit-xml=test-results/unit-tests.xml \
                         --cov=app \
                         --cov-report=xml:coverage.xml \
-                        --cov-report=term-missing || true
+                        --cov-report=term-missing
                 '''
             }
             post {
                 always {
                     junit 'test-results/unit-tests.xml'
+                    publishCoverage adapters: [coberturaAdapter('coverage.xml')]
                 }
             }
         }
@@ -90,6 +91,7 @@ pipeline {
                         -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} \
                         -t ${DOCKER_IMAGE}:latest \
                         --build-arg BUILD_DATE=\$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+                        --build-arg GIT_COMMIT=${env.GIT_COMMIT?.take(7)} \
                         .
                 """
                 echo "✅ Docker imajı oluşturuldu: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
@@ -120,14 +122,53 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh """
+                    # Eski konteyneri durdur
                     docker stop techstore-app 2>/dev/null || true
                     docker rm techstore-app 2>/dev/null || true
+
+                    # Yeni versiyonu başlat
                     docker run -d \
                         --name techstore-app \
                         --restart unless-stopped \
                         -p 5000:5000 \
                         ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest
+
+                    echo "⏳ Sağlık kontrolü bekleniyor..."
+                    sleep 10
                 """
+            }
+        }
+
+        // ── 9. SMOKE TEST ───────────────────────────────────────
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                    # /health endpoint kontrol
+                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
+                    if [ "$STATUS" != "200" ]; then
+                        echo "❌ Smoke test başarısız! HTTP: $STATUS"
+                        exit 1
+                    fi
+
+                    # Ana sayfa kontrol
+                    STATUS2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
+                    if [ "$STATUS2" != "200" ]; then
+                        echo "❌ Ana sayfa erişilemiyor! HTTP: $STATUS2"
+                        exit 1
+                    fi
+
+                    echo "✅ Smoke testleri geçildi"
+                '''
+            }
+        }
+
+        // ── 10. UI TESTLERİ ─────────────────────────────────────
+        stage('UI Tests') {
+            steps {
+                sh '''
+                    . venv/bin/activate
+                    pytest tests/test_ui.py -v --tb=short || true
+                '''
             }
         }
     }
@@ -136,31 +177,37 @@ pipeline {
     post {
         success {
             echo "🎉 Pipeline başarıyla tamamlandı!"
-            script {
-                try {
-                    slackSend(
-                        channel: env.SLACK_CHANNEL,
-                        color: 'good',
-                        message: "✅ *TechStore Deploy Başarılı*\n• Build: #${env.BUILD_NUMBER}"
-                    )
-                } catch (Exception e) {
-                    echo "Slack bildirimi gönderilemedi: ${e.message}"
-                }
-            }
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'good',
+                message: """
+✅ *TechStore Deploy Başarılı*
+• Branch: `${env.BRANCH_NAME}`
+• Build: `#${env.BUILD_NUMBER}`
+• Commit: `${env.GIT_COMMIT?.take(7)}`
+• URL: ${env.BUILD_URL}
+                """
+            )
         }
         failure {
             echo "❌ Pipeline başarısız!"
+            slackSend(
+                channel: env.SLACK_CHANNEL,
+                color: 'danger',
+                message: """
+❌ *TechStore Deploy Başarısız*
+• Branch: `${env.BRANCH_NAME}`
+• Build: `#${env.BUILD_NUMBER}`
+• Aşama: ${env.STAGE_NAME}
+• Detay: ${env.BUILD_URL}console
+                """
+            )
         }
         always {
-            // Temizlik işlemleri için script bloğu kullanımı
-            script {
-                try {
-                    sh "docker image prune -f --filter 'until=72h' || true"
-                } catch (Exception e) {
-                    echo "Docker temizlik hatası: ${e.message}"
-                }
-                cleanWs()
-            }
+            // Eski imajları temizle (son 3'ü tut)
+            sh "docker image prune -f --filter 'until=72h' || true"
+            cleanWs()
         }
     }
 }
+
