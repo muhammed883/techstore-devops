@@ -1,0 +1,11 @@
+workflow-aggregator
+git
+github
+docker-workflow
+sonar
+slack
+blueocean
+junit
+ansicolor
+ws-cleanup
+credentials-binding

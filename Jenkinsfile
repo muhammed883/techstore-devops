@@ -1,212 +1,208 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        ansiColor('xterm')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    parameters {
+        booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
+        booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to Docker Hub using docker-hub-creds.')
+        string(name: 'DOCKER_IMAGE', defaultValue: 'techstore-app', description: 'Local Docker image name.')
+        string(name: 'DOCKER_HUB_REPO', defaultValue: 'USER/techstore-app', description: 'Docker Hub repository, for example username/techstore-app.')
+    }
+
     environment {
-        DOCKER_IMAGE    = 'techstore-app'
-        DOCKER_HUB_USER = 'kullanici-adi'          // Docker Hub kullanıcı adınız
-        SONAR_HOST      = 'http://localhost:9000'
-        SONAR_TOKEN     = credentials('sonar-token') // Jenkins Credentials'a ekleyin
-        SLACK_CHANNEL   = '#devops-techstore'
+        VENV_DIR = '.venv'
+        SONAR_HOST_URL = 'http://sonarqube:9000'
+        SONAR_TOKEN = credentials('sonar-token')
+        SLACK_CHANNEL = '#devops-techstore'
+        COMPOSE_PROJECT_NAME = 'techstore-devops'
     }
 
     stages {
-
-        // ── 1. KAYNAK KOD ───────────────────────────────────────
         stage('Checkout') {
             steps {
                 checkout scm
-                echo "✅ Kod GitHub'dan alındı: ${env.GIT_COMMIT?.take(7)}"
+                script {
+                    env.SHORT_COMMIT = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                }
+                echo "Checked out commit ${env.SHORT_COMMIT}"
             }
         }
 
-        // ── 2. ORTAM KURULUMU ───────────────────────────────────
-        stage('Setup') {
+        stage('Install Dependencies') {
             steps {
                 sh '''
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
+                    python3 -m venv ${VENV_DIR}
+                    . ${VENV_DIR}/bin/activate
+                    python -m pip install --upgrade pip
                     pip install -r requirements.txt
                 '''
-                echo "✅ Python sanal ortamı hazır"
             }
         }
 
-        // ── 3. BİRİM TESTLERİ ──────────────────────────────────
-        stage('Unit Tests') {
+        stage('Unit And Integration Tests') {
             steps {
                 sh '''
-                    . venv/bin/activate
-                    pytest tests/test_app.py \
+                    mkdir -p test-results
+                    . ${VENV_DIR}/bin/activate
+                    pytest tests/test_app.py tests/test_api.py tests/test_cart.py tests/test_search.py tests/test_smoke.py \
                         -v \
                         --tb=short \
-                        --junit-xml=test-results/unit-tests.xml \
-                        --cov=app \
-                        --cov-report=xml:coverage.xml \
-                        --cov-report=term-missing
+                        --junit-xml=test-results/pytest.xml
                 '''
             }
             post {
                 always {
-                    junit 'test-results/unit-tests.xml'
-                    publishCoverage adapters: [coberturaAdapter('coverage.xml')]
+                    junit allowEmptyResults: true, testResults: 'test-results/pytest.xml'
                 }
             }
         }
 
-        // ── 4. KOD KALİTE ANALİZİ ──────────────────────────────
+        stage('Coverage') {
+            steps {
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    pytest tests/test_app.py tests/test_api.py tests/test_cart.py tests/test_search.py tests/test_smoke.py \
+                        --cov=app \
+                        --cov-report=xml:coverage.xml \
+                        --cov-report=term-missing
+                '''
+                archiveArtifacts artifacts: 'coverage.xml', fingerprint: true
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        . venv/bin/activate
-                        sonar-scanner \
-                            -Dsonar.projectKey=techstore \
-                            -Dsonar.projectName="TechStore E-Commerce" \
-                            -Dsonar.sources=. \
-                            -Dsonar.exclusions=venv/**,tests/**,**/__pycache__/** \
-                            -Dsonar.python.coverage.reportPaths=coverage.xml \
-                            -Dsonar.host.url=${SONAR_HOST} \
-                            -Dsonar.login=${SONAR_TOKEN}
-                    '''
-                }
+                sh '''
+                    docker run --rm \
+                        --network techstore-devops_techstore-net \
+                        -e SONAR_HOST_URL=${SONAR_HOST_URL} \
+                        -e SONAR_TOKEN=${SONAR_TOKEN} \
+                        --volumes-from techstore-jenkins \
+                        -w "$PWD" \
+                        sonarsource/sonar-scanner-cli:latest \
+                        -Dsonar.projectKey=techstore \
+                        -Dsonar.projectName="TechStore E-Commerce" \
+                        -Dsonar.sources=. \
+                        -Dsonar.exclusions=.venv/**,venv/**,htmlcov/**,tests/**,**/__pycache__/**,*.pyc \
+                        -Dsonar.python.coverage.reportPaths=coverage.xml
+                '''
             }
         }
 
-        // ── 5. KALİTE KAPISI ───────────────────────────────────
-        stage('Quality Gate') {
+        stage('Docker Build') {
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-                echo "✅ SonarQube kalite kapısı geçildi"
-            }
-        }
-
-        // ── 6. DOCKER İMAJI ─────────────────────────────────────
-        stage('Build Docker Image') {
-            steps {
-                sh """
+                sh '''
                     docker build \
-                        -t ${DOCKER_IMAGE}:${env.BUILD_NUMBER} \
+                        -t ${DOCKER_IMAGE}:${BUILD_NUMBER} \
                         -t ${DOCKER_IMAGE}:latest \
-                        --build-arg BUILD_DATE=\$(date -u +%Y-%m-%dT%H:%M:%SZ) \
-                        --build-arg GIT_COMMIT=${env.GIT_COMMIT?.take(7)} \
                         .
-                """
-                echo "✅ Docker imajı oluşturuldu: ${DOCKER_IMAGE}:${env.BUILD_NUMBER}"
+                '''
             }
         }
 
-        // ── 7. DOCKER HUB'A GÖNDER ──────────────────────────────
-        stage('Push to Docker Hub') {
+        stage('Docker Push') {
+            when {
+                expression { return params.PUSH_IMAGE }
+            }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-hub-creds',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
-                    sh """
-                        echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
-                        docker tag ${DOCKER_IMAGE}:latest \$DOCKER_USER/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                        docker tag ${DOCKER_IMAGE}:latest \$DOCKER_USER/${DOCKER_IMAGE}:latest
-                        docker push \$DOCKER_USER/${DOCKER_IMAGE}:${env.BUILD_NUMBER}
-                        docker push \$DOCKER_USER/${DOCKER_IMAGE}:latest
-                    """
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
+                        docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:latest
+                        docker push ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
+                        docker push ${DOCKER_HUB_REPO}:latest
+                    '''
                 }
-                echo "✅ İmaj Docker Hub'a yüklendi"
             }
         }
 
-        // ── 8. DEPLOY ───────────────────────────────────────────
         stage('Deploy') {
             steps {
-                sh """
-                    # Eski konteyneri durdur
-                    docker stop techstore-app 2>/dev/null || true
-                    docker rm techstore-app 2>/dev/null || true
-
-                    # Yeni versiyonu başlat
-                    docker run -d \
-                        --name techstore-app \
-                        --restart unless-stopped \
-                        -p 5000:5000 \
-                        ${DOCKER_HUB_USER}/${DOCKER_IMAGE}:latest
-
-                    echo "⏳ Sağlık kontrolü bekleniyor..."
-                    sleep 10
-                """
-            }
-        }
-
-        // ── 9. SMOKE TEST ───────────────────────────────────────
-        stage('Smoke Test') {
-            steps {
                 sh '''
-                    # /health endpoint kontrol
-                    STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/health)
-                    if [ "$STATUS" != "200" ]; then
-                        echo "❌ Smoke test başarısız! HTTP: $STATUS"
-                        exit 1
-                    fi
-
-                    # Ana sayfa kontrol
-                    STATUS2=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/)
-                    if [ "$STATUS2" != "200" ]; then
-                        echo "❌ Ana sayfa erişilemiyor! HTTP: $STATUS2"
-                        exit 1
-                    fi
-
-                    echo "✅ Smoke testleri geçildi"
+                    docker compose up -d --build techstore-app prometheus grafana sonarqube
                 '''
             }
         }
 
-        // ── 10. UI TESTLERİ ─────────────────────────────────────
-        stage('UI Tests') {
+        stage('Smoke Test') {
             steps {
                 sh '''
-                    . venv/bin/activate
-                    pytest tests/test_ui.py -v --tb=short || true
+                    for i in $(seq 1 30); do
+                        STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://techstore-app:5000/health || true)
+                        if [ "$STATUS" = "200" ]; then
+                            curl -fsS http://techstore-app:5000/health
+                            exit 0
+                        fi
+                        sleep 2
+                    done
+
+                    echo "Smoke test failed: /health did not return HTTP 200"
+                    docker compose ps
+                    docker logs --tail 80 techstore-app || true
+                    exit 1
+                '''
+            }
+        }
+
+        stage('UI Tests') {
+            when {
+                expression { return params.RUN_UI_TESTS }
+            }
+            steps {
+                sh '''
+                    . ${VENV_DIR}/bin/activate
+                    pytest tests/test_ui.py -v --tb=short
                 '''
             }
         }
     }
 
-    // ── POST ACTIONS ────────────────────────────────────────────
     post {
         success {
-            echo "🎉 Pipeline başarıyla tamamlandı!"
-            slackSend(
-                channel: env.SLACK_CHANNEL,
-                color: 'good',
-                message: """
-✅ *TechStore Deploy Başarılı*
-• Branch: `${env.BRANCH_NAME}`
-• Build: `#${env.BUILD_NUMBER}`
-• Commit: `${env.GIT_COMMIT?.take(7)}`
-• URL: ${env.BUILD_URL}
-                """
-            )
+            echo "TechStore pipeline completed successfully."
+            script {
+                try {
+                    slackSend(
+                        channel: env.SLACK_CHANNEL,
+                        color: 'good',
+                        message: "TechStore SUCCESS | Build #${env.BUILD_NUMBER} | Commit ${env.SHORT_COMMIT} | ${env.BUILD_URL}"
+                    )
+                } catch (err) {
+                    echo "Slack notification skipped: ${err}"
+                }
+            }
         }
         failure {
-            echo "❌ Pipeline başarısız!"
-            slackSend(
-                channel: env.SLACK_CHANNEL,
-                color: 'danger',
-                message: """
-❌ *TechStore Deploy Başarısız*
-• Branch: `${env.BRANCH_NAME}`
-• Build: `#${env.BUILD_NUMBER}`
-• Aşama: ${env.STAGE_NAME}
-• Detay: ${env.BUILD_URL}console
-                """
-            )
+            echo "TechStore pipeline failed."
+            script {
+                try {
+                    slackSend(
+                        channel: env.SLACK_CHANNEL,
+                        color: 'danger',
+                        message: "TechStore FAILURE | Build #${env.BUILD_NUMBER} | Stage ${env.STAGE_NAME} | ${env.BUILD_URL}console"
+                    )
+                } catch (err) {
+                    echo "Slack notification skipped: ${err}"
+                }
+            }
         }
         always {
-            // Eski imajları temizle (son 3'ü tut)
-            sh "docker image prune -f --filter 'until=72h' || true"
-            cleanWs()
+            archiveArtifacts artifacts: 'coverage.xml,test-results/*.xml', allowEmptyArchive: true
+            sh 'docker image prune -f --filter "until=72h" || true'
+            cleanWs(deleteDirs: true, notFailBuild: true)
         }
     }
 }

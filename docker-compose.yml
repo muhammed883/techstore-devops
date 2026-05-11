@@ -63,9 +63,30 @@ services:
     networks:
       - techstore-net
 
+  jenkins:
+    build:
+      context: .
+      dockerfile: jenkins/Dockerfile
+    container_name: techstore-jenkins
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+    restart: always
+    depends_on:
+      - sonarqube
+    networks:
+      - techstore-net
+
 networks:
   techstore-net:
     driver: bridge
 
 volumes:
   grafana-data:
+  jenkins-data:
