@@ -204,10 +204,8 @@ pipeline {
             )
         }
         always {
-    node {
-        cleanWs()
-    }
-}
+            cleanWs()
+        }
 
     }
 }
