@@ -204,10 +204,11 @@ pipeline {
             )
         }
         always {
-            // Eski imajları temizle (son 3'ü tut)
-            sh "docker image prune -f --filter 'until=72h' || true"
-            cleanWs()
-        }
+    node {
+        sh "docker image prune -f --filter 'until=72h' || true"
+        cleanWs()
     }
+}
+       
 }
 
