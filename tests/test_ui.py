@@ -1,12 +1,6 @@
-"""
-TechStore - Selenium UI Test Paketi
-Çalıştırmak için önce uygulamayı başlatın: python app.py
-Sonra: pytest tests/test_ui.py -v
-
-Gereksinimler:
-- Google Chrome kurulu olmalı
-- chromedriver: pip install webdriver-manager
-"""
+"""TechStore Selenium UI tests."""
+import os
+import shutil
 import pytest
 import time
 from selenium import webdriver
@@ -20,17 +14,24 @@ from selenium.webdriver.support import expected_conditions as EC
 def driver():
     """Headless Chrome sürücüsü."""
     options = Options()
-    options.add_argument('--headless')
+    options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1280,900')
 
-    try:
+    chrome_binary = os.environ.get('CHROME_BIN') or shutil.which('chromium') or shutil.which('google-chrome')
+    if chrome_binary:
+        options.binary_location = chrome_binary
+
+    chromedriver = os.environ.get('CHROMEDRIVER') or shutil.which('chromedriver')
+    if chromedriver:
+        service = Service(chromedriver)
+        drv = webdriver.Chrome(service=service, options=options)
+    else:
         from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
         drv = webdriver.Chrome(service=service, options=options)
-    except Exception:
-        drv = webdriver.Chrome(options=options)
 
     drv.implicitly_wait(5)
     yield drv

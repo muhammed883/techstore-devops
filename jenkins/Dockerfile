@@ -8,6 +8,9 @@ RUN apt-get update \
         curl \
         gnupg \
         lsb-release \
+        chromium \
+        chromium-driver \
+        fonts-liberation \
         python3 \
         python3-venv \
         python3-pip \

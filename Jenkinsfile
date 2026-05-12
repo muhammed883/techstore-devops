@@ -8,7 +8,7 @@ pipeline {
     }
 
     parameters {
-        booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
+        booleanParam(name: 'RUN_UI_TESTS', defaultValue: true, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Run SonarQube analysis. Requires Jenkins SonarQube installation named SonarQube.')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: true, description: 'Push image to Docker Hub using docker-hub-creds.')
         booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: true, description: 'Wait for SonarQube Quality Gate by polling SonarQube.')
