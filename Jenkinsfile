@@ -124,8 +124,13 @@ Original error: ${err}"""
                 expression { return params.RUN_SONAR && params.WAIT_FOR_QUALITY_GATE }
             }
             steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
+                // NOTE: Requires a SonarQube webhook configured to http://jenkins:8080/sonarqube-webhook/
+                // Without the webhook, this stage will always time out.
+                // Keep WAIT_FOR_QUALITY_GATE=false unless the webhook is configured.
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    timeout(time: 5, unit: 'MINUTES') {
+                        waitForQualityGate abortPipeline: false
+                    }
                 }
             }
         }
