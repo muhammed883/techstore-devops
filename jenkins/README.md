@@ -86,7 +86,7 @@ Notes:
 
 - `Docker Push` runs only when the `PUSH_IMAGE` parameter is checked.
 - `UI Tests` runs only when the `RUN_UI_TESTS` parameter is checked.
-- `Quality Gate` runs only when `WAIT_FOR_QUALITY_GATE` is checked and a SonarQube webhook is configured.
+- `Quality Gate` runs only when `WAIT_FOR_QUALITY_GATE` is checked. The pipeline polls SonarQube directly, so a SonarQube webhook is not required.
 - Jenkins runs inside Docker, so the pipeline smoke test uses `http://techstore-app:5000/health`. From your browser or host terminal, use `http://localhost:5000/health`.
 
 ## SonarQube Quality Gate
@@ -132,17 +132,12 @@ For a temporary pipeline-only smoke run, build with parameter `RUN_SONAR=false`.
 Required Jenkins credentials:
 
 - `docker-hub-creds`: Username/password for Docker Hub, only needed when `PUSH_IMAGE=true`.
+- If you do not need to publish the image, keep `PUSH_IMAGE=false`. Enabling it without this credential marks the push stage failed and the build unstable, while later validation stages can still run.
 
 Recommended webhook:
 
 ```text
 http://localhost:8080/github-webhook/
-```
-
-For SonarQube Quality Gate callbacks, add this webhook in SonarQube if you enable `WAIT_FOR_QUALITY_GATE`:
-
-```text
-http://jenkins:8080/sonarqube-webhook/
 ```
 
 Grafana: `http://localhost:3000` with `admin / techstore123`.

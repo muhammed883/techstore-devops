@@ -142,6 +142,7 @@ docker logs jenkins | grep -A 3 "Please use"
 3. Credentials ekle:
    - `sonar-token` → SonarQube token
    - `docker-hub-creds` → Docker Hub kullanıcı adı/şifre
+     - Yalnızca `PUSH_IMAGE=true` ile Docker Hub'a push edecekseniz gereklidir.
 4. **New Item** → **Pipeline** → SCM: Git (GitHub repo URL)
 5. GitHub Webhook: `http://JENKINS_IP:8080/github-webhook/`
 
@@ -151,6 +152,10 @@ docker logs jenkins | grep -A 3 "Please use"
 Checkout → Setup → Unit Tests → SonarQube → Quality Gate
     → Docker Build → Docker Push → Deploy → Smoke Test → UI Tests
 ```
+
+`Docker Push` aşaması sadece `PUSH_IMAGE=true` iken çalışır. Bu parametreyi açarsanız Jenkins'te `docker-hub-creds` ID'li username/password credential bulunmalıdır; eksikse push aşaması başarısız görünür, build unstable olur ve sonraki doğrulama aşamaları devam eder.
+
+`Quality Gate` aşaması sadece `WAIT_FOR_QUALITY_GATE=true` iken çalışır ve SonarQube sonucunu API üzerinden bekler.
 
 ---
 

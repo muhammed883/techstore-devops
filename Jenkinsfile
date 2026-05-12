@@ -11,7 +11,7 @@ pipeline {
         booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Run SonarQube analysis. Requires Jenkins SonarQube installation named SonarQube.')
         booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to Docker Hub using docker-hub-creds.')
-        booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: false, description: 'Wait for SonarQube Quality Gate. Requires SonarQube webhook to Jenkins.')
+        booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: false, description: 'Wait for SonarQube Quality Gate by polling SonarQube.')
         string(name: 'DOCKER_IMAGE', defaultValue: 'techstore-app', description: 'Local Docker image name.')
         string(name: 'DOCKER_HUB_REPO', defaultValue: 'muhammed883/techstore-app', description: 'Docker Hub repository, for example username/techstore-app.')
     }
@@ -124,12 +124,59 @@ Original error: ${err}"""
                 expression { return params.RUN_SONAR && params.WAIT_FOR_QUALITY_GATE }
             }
             steps {
-                // NOTE: Requires a SonarQube webhook configured to http://jenkins:8080/sonarqube-webhook/
-                // Without the webhook, this stage will always time out.
-                // Keep WAIT_FOR_QUALITY_GATE=false unless the webhook is configured.
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    timeout(time: 1, unit: 'MINUTES') {
-                        waitForQualityGate abortPipeline: false
+                    withSonarQubeEnv('SonarQube') {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            sh '''
+                                set -eu
+
+                                REPORT_FILE=".scannerwork/report-task.txt"
+                                if [ ! -f "$REPORT_FILE" ]; then
+                                    echo "SonarQube report task file was not found: $REPORT_FILE"
+                                    exit 1
+                                fi
+
+                                CE_TASK_URL=$(sed -n 's/^ceTaskUrl=//p' "$REPORT_FILE")
+                                if [ -z "$CE_TASK_URL" ]; then
+                                    echo "SonarQube CE task URL was not found in $REPORT_FILE"
+                                    exit 1
+                                fi
+
+                                echo "Waiting for SonarQube CE task: $CE_TASK_URL"
+                                ANALYSIS_ID=""
+                                for i in $(seq 1 60); do
+                                    RESPONSE=$(curl -fsS -u "${SONAR_AUTH_TOKEN}:" "$CE_TASK_URL")
+                                    STATUS=$(printf '%s' "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["task"]["status"])')
+                                    echo "SonarQube CE task status: $STATUS"
+
+                                    if [ "$STATUS" = "SUCCESS" ]; then
+                                        ANALYSIS_ID=$(printf '%s' "$RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["task"]["analysisId"])')
+                                        break
+                                    fi
+
+                                    if [ "$STATUS" = "FAILED" ] || [ "$STATUS" = "CANCELED" ]; then
+                                        echo "SonarQube CE task finished with status: $STATUS"
+                                        exit 1
+                                    fi
+
+                                    sleep 5
+                                done
+
+                                if [ -z "$ANALYSIS_ID" ]; then
+                                    echo "Timed out waiting for SonarQube CE task to finish."
+                                    exit 1
+                                fi
+
+                                GATE_URL="${SONAR_HOST_URL}/api/qualitygates/project_status?analysisId=${ANALYSIS_ID}"
+                                GATE_RESPONSE=$(curl -fsS -u "${SONAR_AUTH_TOKEN}:" "$GATE_URL")
+                                GATE_STATUS=$(printf '%s' "$GATE_RESPONSE" | python3 -c 'import json,sys; print(json.load(sys.stdin)["projectStatus"]["status"])')
+                                echo "SonarQube Quality Gate status: $GATE_STATUS"
+
+                                if [ "$GATE_STATUS" != "OK" ]; then
+                                    exit 1
+                                fi
+                            '''
+                        }
                     }
                 }
             }
@@ -151,18 +198,20 @@ Original error: ${err}"""
                 expression { return params.PUSH_IMAGE }
             }
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-hub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh '''
-                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                        docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
-                        docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:latest
-                        docker push ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
-                        docker push ${DOCKER_HUB_REPO}:latest
-                    '''
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'docker-hub-creds',
+                        usernameVariable: 'DOCKER_USER',
+                        passwordVariable: 'DOCKER_PASS'
+                    )]) {
+                        sh '''
+                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                            docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
+                            docker tag ${DOCKER_IMAGE}:latest ${DOCKER_HUB_REPO}:latest
+                            docker push ${DOCKER_HUB_REPO}:${BUILD_NUMBER}
+                            docker push ${DOCKER_HUB_REPO}:latest
+                        '''
+                    }
                 }
             }
         }
