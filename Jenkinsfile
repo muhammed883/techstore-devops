@@ -10,8 +10,8 @@ pipeline {
     parameters {
         booleanParam(name: 'RUN_UI_TESTS', defaultValue: false, description: 'Run Selenium UI tests. Requires Chrome/driver support in the Jenkins agent.')
         booleanParam(name: 'RUN_SONAR', defaultValue: true, description: 'Run SonarQube analysis. Requires Jenkins SonarQube installation named SonarQube.')
-        booleanParam(name: 'PUSH_IMAGE', defaultValue: false, description: 'Push image to Docker Hub using docker-hub-creds.')
-        booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: false, description: 'Wait for SonarQube Quality Gate by polling SonarQube.')
+        booleanParam(name: 'PUSH_IMAGE', defaultValue: true, description: 'Push image to Docker Hub using docker-hub-creds.')
+        booleanParam(name: 'WAIT_FOR_QUALITY_GATE', defaultValue: true, description: 'Wait for SonarQube Quality Gate by polling SonarQube.')
         string(name: 'DOCKER_IMAGE', defaultValue: 'techstore-app', description: 'Local Docker image name.')
         string(name: 'DOCKER_HUB_REPO', defaultValue: 'muhammed883/techstore-app', description: 'Docker Hub repository, for example username/techstore-app.')
     }
