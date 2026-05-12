@@ -153,7 +153,7 @@ Checkout → Setup → Unit Tests → SonarQube → Quality Gate
     → Docker Build → Docker Push → Deploy → Smoke Test → UI Tests
 ```
 
-`Docker Push` aşaması sadece `PUSH_IMAGE=true` iken çalışır. Bu parametreyi açarsanız Jenkins'te `docker-hub-creds` ID'li username/password credential bulunmalıdır; eksikse push aşaması başarısız görünür, build unstable olur ve sonraki doğrulama aşamaları devam eder.
+`Docker Push` aşaması sadece `PUSH_IMAGE=true` iken çalışır. Bu parametreyi açarsanız Jenkins'te `docker-hub-creds` ID'li username/password credential bulunmalıdır; `DOCKER_HUB_REPO` değeri de aynı Docker Hub kullanıcısının namespace'i altında olmalıdır.
 
 `Quality Gate` aşaması sadece `WAIT_FOR_QUALITY_GATE=true` iken çalışır ve SonarQube sonucunu API üzerinden bekler.
 
