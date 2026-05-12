@@ -87,7 +87,7 @@ Notes:
 - `Docker Push` runs only when the `PUSH_IMAGE` parameter is checked.
 - `UI Tests` runs only when the `RUN_UI_TESTS` parameter is checked.
 - `Quality Gate` runs only when `WAIT_FOR_QUALITY_GATE` is checked. The pipeline polls SonarQube directly, so a SonarQube webhook is not required.
-- Jenkins runs inside Docker, so the pipeline smoke test uses `http://techstore-app:5000/health`. From your browser or host terminal, use `http://localhost:5000/health`.
+- Jenkins runs inside Docker, so the pipeline deploy stage rolls out `techstore-app` and the smoke test uses `http://techstore-app:5000/health`. From your browser or host terminal, use `http://localhost:5000/health`.
 
 ## SonarQube Quality Gate
 

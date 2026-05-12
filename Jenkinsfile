@@ -221,7 +221,7 @@ Original error: ${err}"""
                 script {
                     try {
                         sh '''
-                            docker compose up -d --build techstore-app prometheus grafana sonarqube
+                            docker compose up -d --build techstore-app
                         '''
                     } catch (err) {
                         sh 'docker compose ps || true'
