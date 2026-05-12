@@ -128,7 +128,7 @@ Original error: ${err}"""
                 // Without the webhook, this stage will always time out.
                 // Keep WAIT_FOR_QUALITY_GATE=false unless the webhook is configured.
                 catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
-                    timeout(time: 5, unit: 'MINUTES') {
+                    timeout(time: 1, unit: 'MINUTES') {
                         waitForQualityGate abortPipeline: false
                     }
                 }
